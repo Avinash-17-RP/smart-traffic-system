@@ -27,7 +27,7 @@ export const DESTINATION_INFO: DestinationInfo[] = [
   { id: "4845915135", label: "Eachanari Vinayagar Temple", type: "Famous Temple", icon: "🛕", category: "Heritage" },
   { id: "247429168", label: "Thudiyalur Commercial Junction", type: "Market Hub", icon: "🛒", category: "Commercial" },
   { id: "12918595310", label: "Kovaipudur (Sri Krishna College)", type: "Township & College", icon: "🎓", category: "Education" },
-  { id: "2173379743", label: "Podanur Junction & Hospital", type: "Railway Hub", icon: "🚆", category: "Transit" },
+  { id: "2173379743", label: "Podanur Government Hospital", type: "Government Hospital", icon: "🏥", category: "Hospital" },
   { id: "5325645821", label: "Vadakovai (Avinashi Flyover)", type: "Commercial Hub", icon: "📍", category: "Commercial" },
   { id: "803271937", label: "Coimbatore Central (VOC Park)", type: "City Center & Zoo", icon: "🌳", category: "Recreation" },
   { id: "1482456202", label: "Ganapathy Commercial Hub (Sathy Rd)", type: "Commercial Junction", icon: "📍", category: "Commercial" },

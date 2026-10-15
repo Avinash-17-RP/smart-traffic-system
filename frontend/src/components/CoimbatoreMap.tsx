@@ -63,9 +63,9 @@ export const MAIN_AREA_NODES = [
   { id: '13999738905', name: 'Sri Ramakrishna Hospital', x: 420, y: 205, color: '#ef4444', icon: '🏥' },
   { id: '2166442088', name: 'KG Hospital', x: 475, y: 280, color: '#ef4444', icon: '🏥' },
   { id: '2173379743', name: 'Podanur Government Hospital', x: 510, y: 395, color: '#ef4444', icon: '🏥' },
-  { id: '2166371123', name: 'CIT College Hospital', x: 655, y: 210, color: '#ef4444', icon: '🏥' },
   // ── Regular Landmarks ──
   { id: '12381407399', name: 'Tidel Park Coimbatore (ELCOT SEZ)', x: 625, y: 195, color: '#38bdf8', icon: '💻' },
+  { id: '2166371123', name: 'CIT College (Coimbatore Institute of Tech)', x: 655, y: 210, color: '#38bdf8', icon: '🎓' },
   { id: '3624457613', name: 'Coimbatore International Airport (CJB)', x: 675, y: 180, color: '#38bdf8', icon: '✈️' },
   { id: '802493247', name: 'Lakshmi Mills Urban Junction', x: 495, y: 265, color: '#38bdf8', icon: '🏢' },
   { id: '5325645821', name: 'Vadakovai (Avinashi Flyover)', x: 418, y: 258, color: '#38bdf8', icon: '📍' },
@@ -751,10 +751,10 @@ export const CoimbatoreMap: React.FC<CoimbatoreMapProps> = ({
     );
   }, [findJunctionAt, destinationJunctions]);
 
-  // Emergency Ambulance: Route from current start (or GPS) to nearest hospital
+  // Emergency Ambulance: Route from current start/destination (or GPS) to nearest hospital
   const handleEmergencyToHospital = useCallback(() => {
-    // Use current start point or detect live location first
-    const origin = startPoint || (userLocation ? findJunctionAt(userLocation) : null) || destinationJunctions[0];
+    // Use current start point, or end point if user clicked destination, or detect live location
+    const origin = startPoint || endPoint || (userLocation ? findJunctionAt(userLocation) : null) || destinationJunctions[0];
     if (!origin) return;
 
     setStartPoint(origin);
@@ -768,7 +768,7 @@ export const CoimbatoreMap: React.FC<CoimbatoreMapProps> = ({
         setEndPoint(hospitalJ);
       }
     }
-  }, [startPoint, userLocation, findJunctionAt, destinationJunctions, findNearestHospital]);
+  }, [startPoint, endPoint, userLocation, findJunctionAt, destinationJunctions, findNearestHospital]);
 
   // Search logic
   useEffect(() => {

@@ -18,7 +18,10 @@ export let INTERSECTION_IDS = new Set<string>();
 export let VISIBLE_INTERSECTION_IDS = new Set<string>();
 export let ROAD_ADJACENCY: Record<string, string[]> = {};
 
-export const HOSPITAL_IDS = ['10593619297', '9255100786', '2173379743', '11760103234', '13999738605', '13999738905', '12381407399', '2166371123', '2166442088'];
+// Verified Major Emergency Hospitals of Coimbatore
+// 10593619297: PSG Hospitals, 9255100786: KMCH Hospital, 11760103234: GKNM Hospital,
+// 13999738605: Ganga Hospital, 13999738905: Sri Ramakrishna Hospital, 2166442088: KG Hospital, 2173379743: Podanur GH
+export const HOSPITAL_IDS = ['10593619297', '9255100786', '2173379743', '11760103234', '13999738605', '13999738905', '2166442088'];
 
 let loaded = false;
 let loading: Promise<void> | null = null;

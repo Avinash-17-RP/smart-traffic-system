@@ -90,7 +90,7 @@ export default function CitizenRoute() {
             { icon: <Route size={16} />,   value: roadCount.toLocaleString() + 'k',   label: 'Road Segments', color: '#34d399' },
             { icon: <Car size={16} />,     value: vehicleCount.toLocaleString(),       label: 'Active Vehicles', color: '#a78bfa' },
             { icon: <Signal size={16} />,  value: liveStats.avgWait + 's',             label: 'Avg Signal Wait', color: '#fbbf24' },
-            { icon: <Hospital size={16} />,value: '8',                                 label: 'Hospital Nodes', color: '#f87171' },
+            { icon: <Hospital size={16} />,value: '7',                                 label: 'Hospital Nodes', color: '#f87171' },
           ].map(s => (
             <div key={s.label} className="lp-stat-card">
               <div className="lp-stat-icon" style={{ color: s.color }}>{s.icon}</div>
