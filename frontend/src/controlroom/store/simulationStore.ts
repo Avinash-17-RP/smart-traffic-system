@@ -10,6 +10,7 @@ import type {
   AlgorithmResult, LogEntry, ScenarioType, MetricsSnapshot
 } from '../types';
 import { INITIAL_JUNCTIONS, INITIAL_ROADS, JUNCTION_IDS, HOSPITAL_IDS, INTERSECTION_IDS, getRoadBetween } from '../data/network';
+import { DESTINATION_BY_ID } from '../data/destinations';
 import {
   spawnVehicle, tickVehicle, updateTrafficMetricsBulk, computeMetrics, rerouteVehicles,
   createLogEntry, nextVehicleId
@@ -47,6 +48,9 @@ function initialState(): SimulationState {
 
     selectedJunctionId: null,
     selectedRoadId: null,
+
+    blockRoadMode: false,
+    blockRoadFirstJunctionId: null,
 
     metrics: {
       tick: 0,
@@ -96,6 +100,10 @@ interface StoreActions {
   createCongestion: (junctionId?: string) => void;
   blockRoad: (roadId?: string) => void;
   unblockRoad: (roadId: string) => void;
+  unblockAllRoads: () => void;
+  setBlockRoadMode: (active: boolean) => void;
+  setBlockRoadFirstJunctionId: (id: string | null) => void;
+  blockRoadBetweenJunctions: (junctionAId: string, junctionBId: string) => boolean;
   spawnAmbulance: () => void;
   resetScenario: () => void;
 
@@ -409,6 +417,125 @@ export const useSimulationStore = create<SimulationState & StoreActions>()(
         }
       });
       get().addLog('SUCCESS', `Road ${roadId} unblocked`);
+    },
+
+    unblockAllRoads: () => {
+      set(state => {
+        for (const road of Object.values(state.roads)) {
+          if (road.isBlocked) {
+            road.isBlocked = false;
+            road.status = 'CLEAR';
+            road.congestionLevel = 0.1;
+          }
+        }
+      });
+      get().addLog('SUCCESS', '🔓 All road blocks cleared!');
+    },
+
+    setBlockRoadMode: (active) => {
+      set({ blockRoadMode: active, blockRoadFirstJunctionId: null });
+      if (active) {
+        get().addLog('INFO', '🚧 Road Block Mode active: Click 1st junction on the map, then 2nd junction.');
+      }
+    },
+
+    setBlockRoadFirstJunctionId: (id) => {
+      set({ blockRoadFirstJunctionId: id });
+    },
+
+    blockRoadBetweenJunctions: (junctionAId, junctionBId) => {
+      if (junctionAId === junctionBId) return false;
+      const st = get();
+      const jA = st.junctions[junctionAId] || INITIAL_JUNCTIONS[junctionAId];
+      const jB = st.junctions[junctionBId] || INITIAL_JUNCTIONS[junctionBId];
+      const nameA = DESTINATION_BY_ID.get(junctionAId)?.label || jA?.name || junctionAId;
+      const nameB = DESTINATION_BY_ID.get(junctionBId)?.label || jB?.name || junctionBId;
+
+      const roadsToBlock: string[] = [];
+      const direct1 = st.roads[`${junctionAId}-${junctionBId}`];
+      const direct2 = st.roads[`${junctionBId}-${junctionAId}`];
+      if (direct1) roadsToBlock.push(direct1.id);
+      if (direct2 && !roadsToBlock.includes(direct2.id)) roadsToBlock.push(direct2.id);
+
+      // If not directly adjacent, find shortest path between them and block all segments
+      if (roadsToBlock.length === 0) {
+        const pathRes = dijkstra(st.junctions, st.roads, junctionAId, junctionBId);
+        if (pathRes && pathRes.found && pathRes.path.length > 1) {
+          for (let i = 0; i < pathRes.path.length - 1; i++) {
+            const u = pathRes.path[i];
+            const v = pathRes.path[i + 1];
+            const r = getRoadBetween(st.roads, u, v);
+            if (r) {
+              roadsToBlock.push(r.id);
+              if (st.roads[`${v}-${u}`]) roadsToBlock.push(`${v}-${u}`);
+            }
+          }
+        }
+      }
+
+      if (roadsToBlock.length === 0) {
+        get().addLog('WARNING', `Could not find a connecting road between ${nameA} and ${nameB}`);
+        set({ blockRoadMode: false, blockRoadFirstJunctionId: null });
+        return false;
+      }
+
+      const allAlreadyBlocked = roadsToBlock.every(id => st.roads[id]?.isBlocked);
+      if (allAlreadyBlocked) {
+        set(state => {
+          for (const rId of roadsToBlock) {
+            if (state.roads[rId]) {
+              state.roads[rId].isBlocked = false;
+              state.roads[rId].status = 'CLEAR';
+              state.roads[rId].congestionLevel = 0.1;
+            }
+          }
+          state.blockRoadMode = false;
+          state.blockRoadFirstJunctionId = null;
+        });
+        get().addLog('SUCCESS', `🔓 UNBLOCKED road between ${nameA} and ${nameB}`);
+        return true;
+      }
+
+      set(state => {
+        for (const rId of roadsToBlock) {
+          if (state.roads[rId]) {
+            state.roads[rId].isBlocked = true;
+            state.roads[rId].status = 'BLOCKED';
+            state.roads[rId].trafficCost = 999999;
+          }
+        }
+
+        // Reroute active ambulance if needed
+        const amb = state.activeEmergencyVehicleId ? state.vehicles[state.activeEmergencyVehicleId] : null;
+        if (amb && amb.type === 'AMBULANCE') {
+          const ambRoads = routeRoadIds(amb.route, state.roads);
+          if (roadsToBlock.some(rId => ambRoads.includes(rId))) {
+            rerouteActiveAmbulance(state, `Road between ${nameA} and ${nameB} blocked`);
+          }
+        }
+
+        // Reroute normal traffic
+        if (state.settings.simulationMode === 'MA_TRSN') {
+          const { updatedVehicles, count } = rerouteVehicles(state.vehicles, state.roads, JUNCTION_IDS);
+          for (const [id, update] of Object.entries(updatedVehicles)) {
+            if (state.vehicles[id]) Object.assign(state.vehicles[id], update);
+          }
+          if (count > 0) {
+            state.activeAlgorithm = {
+              algorithm: 'DIJKSTRA',
+              timestamp: state.tick,
+              reason: `Road blocked: ${nameA} ⇄ ${nameB}`,
+              routesRecalculated: count,
+            };
+          }
+        }
+
+        state.blockRoadMode = false;
+        state.blockRoadFirstJunctionId = null;
+      });
+
+      get().addLog('WARNING', `⛔ Road between ${nameA} and ${nameB} BLOCKED! Traffic rerouted.`);
+      return true;
     },
 
     // ---- Spawn ambulance ----

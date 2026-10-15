@@ -55,6 +55,8 @@ export const NetworkCanvas: React.FC<Props> = ({ width = W, height = H }) => {
   const {
     junctions, roads, vehicles, greenCorridorJunctions, greenCorridorRoads,
     activeAlgorithm, selectJunction, selectRoad, selectedJunctionId, selectedRoadId,
+    blockRoadMode, setBlockRoadMode, blockRoadFirstJunctionId, setBlockRoadFirstJunctionId,
+    blockRoadBetweenJunctions, blockRoad,
   } = useSimulationStore();
 
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -337,6 +339,106 @@ export const NetworkCanvas: React.FC<Props> = ({ width = W, height = H }) => {
       }
     }
 
+    // ── BLOCKED ROADS HIGH-VISIBILITY IDENTITY ──
+    const blockedRoadList = Object.values(roads).filter(r => r.isBlocked);
+    for (const r of blockedRoadList) {
+      const a = INITIAL_JUNCTIONS[r.from];
+      const b = INITIAL_JUNCTIONS[r.to];
+      if (!a || !b) continue;
+
+      ctx.save();
+
+      // 1. Glowing Neon Red Hazard Aura
+      ctx.beginPath();
+      ctx.moveTo(a.x, a.y);
+      ctx.lineTo(b.x, b.y);
+      ctx.strokeStyle = 'rgba(239, 68, 68, 0.45)';
+      ctx.lineWidth = 8 / sx;
+      ctx.lineCap = 'round';
+      ctx.stroke();
+
+      // 2. High-Contrast Red Hazard Dashed Line
+      ctx.beginPath();
+      ctx.moveTo(a.x, a.y);
+      ctx.lineTo(b.x, b.y);
+      ctx.strokeStyle = '#ef4444';
+      ctx.lineWidth = 3.5 / sx;
+      ctx.setLineDash([7 / sx, 4 / sx]);
+      ctx.stroke();
+      ctx.setLineDash([]);
+
+      // 3. Road Block Barrier Badge at Midpoint
+      const midX = (a.x + b.x) / 2;
+      const midY = (a.y + b.y) / 2;
+      const badgeR = 8.5 / sx;
+
+      // Outer hazard ring
+      ctx.beginPath();
+      ctx.arc(midX, midY, badgeR + 3 / sx, 0, Math.PI * 2);
+      ctx.strokeStyle = 'rgba(239, 68, 68, 0.85)';
+      ctx.lineWidth = 1.5 / sx;
+      ctx.stroke();
+
+      // Red filled circle
+      ctx.beginPath();
+      ctx.arc(midX, midY, badgeR, 0, Math.PI * 2);
+      ctx.fillStyle = '#dc2626';
+      ctx.fill();
+      ctx.strokeStyle = '#ffffff';
+      ctx.lineWidth = 1.2 / sx;
+      ctx.stroke();
+
+      // White No-Entry Bar
+      ctx.beginPath();
+      ctx.rect(midX - 5 / sx, midY - 1.2 / sx, 10 / sx, 2.4 / sx);
+      ctx.fillStyle = '#ffffff';
+      ctx.fill();
+
+      // Text Label: "⛔ BLOCKED"
+      ctx.font = `bold ${8 / sx}px Inter, sans-serif`;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'bottom';
+      ctx.strokeStyle = 'rgba(2, 8, 20, 0.95)';
+      ctx.lineWidth = 2.5 / sx;
+      ctx.strokeText('⛔ BLOCKED', midX, midY - 9 / sx);
+      ctx.fillStyle = '#fca5a5';
+      ctx.fillText('⛔ BLOCKED', midX, midY - 9 / sx);
+
+      // 4. Endpoint hazard warning rings
+      for (const endPt of [a, b]) {
+        ctx.beginPath();
+        ctx.arc(endPt.x, endPt.y, 6.5 / sx, 0, Math.PI * 2);
+        ctx.strokeStyle = '#ef4444';
+        ctx.lineWidth = 1.5 / sx;
+        ctx.stroke();
+      }
+
+      ctx.restore();
+    }
+
+    // ── HIGHLIGHT 1ST SELECTED JUNCTION IN ROAD BLOCK MODE ──
+    if (blockRoadMode && blockRoadFirstJunctionId) {
+      const j1 = junctions[blockRoadFirstJunctionId] || INITIAL_JUNCTIONS[blockRoadFirstJunctionId];
+      if (j1) {
+        ctx.save();
+        ctx.beginPath();
+        ctx.arc(j1.x, j1.y, 11 / sx, 0, Math.PI * 2);
+        ctx.strokeStyle = '#f59e0b';
+        ctx.lineWidth = 3 / sx;
+        ctx.stroke();
+
+        ctx.font = `bold ${9 / sx}px Inter, sans-serif`;
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'bottom';
+        ctx.strokeStyle = 'rgba(2, 8, 20, 0.95)';
+        ctx.lineWidth = 2.5 / sx;
+        ctx.strokeText('📍 [1] SELECTED', j1.x, j1.y - 12 / sx);
+        ctx.fillStyle = '#fde68a';
+        ctx.fillText('📍 [1] SELECTED', j1.x, j1.y - 12 / sx);
+        ctx.restore();
+      }
+    }
+
     // ONLY user-facing destination markers are drawn. Ordinary OSM geometry nodes
     // remain invisible unless they become the selected/routed endpoint.
     for (const j of destinationJunctions) {
@@ -442,6 +544,12 @@ export const NetworkCanvas: React.FC<Props> = ({ width = W, height = H }) => {
       const d = Math.hypot(j.x - world.x, j.y - world.y);
       if (d <= threshold && (!best || d < best.d)) best = { id: j.id, d };
     }
+    if (best) return best.id;
+    const fallbackThresh = Math.max(6, 11 / zoom);
+    for (const j of Object.values(INITIAL_JUNCTIONS)) {
+      const d = Math.hypot(j.x - world.x, j.y - world.y);
+      if (d <= fallbackThresh && (!best || d < best.d)) best = { id: j.id, d };
+    }
     return best?.id ?? null;
   }, [destinationJunctions, zoom]);
 
@@ -540,18 +648,37 @@ export const NetworkCanvas: React.FC<Props> = ({ width = W, height = H }) => {
     const rect = e.currentTarget.getBoundingClientRect();
     const world = screenToWorld(e.clientX - rect.left, e.clientY - rect.top);
     const junction = findJunctionAt(world);
+    const road = findRoadAt(world);
+
+    if (blockRoadMode) {
+      if (junction) {
+        if (!blockRoadFirstJunctionId) {
+          setBlockRoadFirstJunctionId(junction);
+        } else {
+          blockRoadBetweenJunctions(blockRoadFirstJunctionId, junction);
+        }
+        return;
+      }
+      if (road) {
+        blockRoad(road);
+        setBlockRoadMode(false);
+        return;
+      }
+      return;
+    }
+
     if (junction) {
       selectJunction(junction === selectedJunctionId ? null : junction);
       return;
     }
-    const road = findRoadAt(world);
     if (road) {
       selectRoad(road === selectedRoadId ? null : road);
       return;
     }
     selectJunction(null);
     selectRoad(null);
-  }, [screenToWorld, findJunctionAt, findRoadAt, selectJunction, selectRoad, selectedJunctionId, selectedRoadId]);
+  }, [screenToWorld, findJunctionAt, findRoadAt, selectJunction, selectRoad, selectedJunctionId, selectedRoadId,
+      blockRoadMode, blockRoadFirstJunctionId, setBlockRoadFirstJunctionId, blockRoadBetweenJunctions, blockRoad, setBlockRoadMode]);
 
   const resetViewport = useCallback(() => {
     zoomRef.current = 1;
@@ -625,6 +752,32 @@ export const NetworkCanvas: React.FC<Props> = ({ width = W, height = H }) => {
         DESTINATIONS • {destinationJunctions.length}
       </div>
 
+      {/* ── ROAD BLOCK MODE INTERACTIVE BANNER ── */}
+      {blockRoadMode && (
+        <div className="absolute top-4 left-1/2 -translate-x-1/2 z-40 flex items-center gap-3 px-4 py-2.5 rounded-xl bg-slate-950/95 border border-red-500/80 shadow-[0_0_30px_rgba(239,68,68,0.35)] backdrop-blur-md text-xs">
+          <span className="flex h-3 w-3 relative shrink-0">
+            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
+            <span className="relative inline-flex rounded-full h-3 w-3 bg-red-500"></span>
+          </span>
+          <div className="flex flex-col text-left">
+            <span className="text-red-400 font-extrabold tracking-wide uppercase text-[10px]">
+              🚧 Road Block Mode
+            </span>
+            <span className="text-slate-100 font-semibold text-xs">
+              {!blockRoadFirstJunctionId
+                ? 'Click 1st junction on the map to start'
+                : `1st: ${DESTINATION_BY_ID.get(blockRoadFirstJunctionId)?.label || junctions[blockRoadFirstJunctionId]?.name || 'Junction 1'} → Click 2nd junction to block!`}
+            </span>
+          </div>
+          <button
+            onClick={() => setBlockRoadMode(false)}
+            className="ml-2 px-2.5 py-1 rounded-lg bg-red-950/80 hover:bg-red-900 border border-red-700/80 text-red-200 text-xs font-bold transition-all cursor-pointer"
+          >
+            ✕ Cancel
+          </button>
+        </div>
+      )}
+
       <div className="absolute left-3 bottom-3 rounded-md border border-slate-700/80 bg-slate-950/92 px-3 py-2.5 backdrop-blur-sm pointer-events-none min-w-[122px]">
         <div className="text-[9px] font-bold tracking-wider text-slate-500 mb-2">MAP LEGEND</div>
         <div className="flex flex-col gap-1.5 text-[9px] text-slate-400">
@@ -634,6 +787,7 @@ export const NetworkCanvas: React.FC<Props> = ({ width = W, height = H }) => {
           <span className="flex items-center gap-2"><i className="legend-landmark" />Destination / Landmark</span>
           <span className="flex items-center gap-2"><i className="legend-line legend-road" />Road</span>
           <span className="flex items-center gap-2"><i className="legend-line legend-route" />Active route / Green corridor</span>
+          <span className="flex items-center gap-2"><span className="inline-block w-4 h-1.5 rounded-sm bg-red-500 shadow-[0_0_6px_#ef4444]" />⛔ Blocked Road</span>
         </div>
       </div>
       <div className="absolute right-3 bottom-3 rounded-md border border-slate-700/60 bg-slate-950/75 px-2 py-1 text-[9px] text-slate-500 pointer-events-none">

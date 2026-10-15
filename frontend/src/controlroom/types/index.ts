@@ -186,6 +186,10 @@ export interface SimulationState {
   selectedJunctionId: string | null;
   selectedRoadId: string | null;
 
+  // Road Block Mode
+  blockRoadMode: boolean;
+  blockRoadFirstJunctionId: string | null;
+
   // Metrics
   metrics: MetricsSnapshot;
   metricsHistory: MetricsSnapshot[];

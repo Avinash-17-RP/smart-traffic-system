@@ -20,6 +20,7 @@ export const LeftSidebar: React.FC<{ width?: number }> = ({ width = 220 }) => {
     settings, setScenario, setTrafficDensity, setSpawnRate, setCongestionSeverity,
     createCongestion, blockRoad, spawnAmbulance, resetScenario,
     setSimulationMode, runComparison, start, selectedJunctionId, selectedRoadId,
+    blockRoadMode, setBlockRoadMode, blockRoadFirstJunctionId, unblockAllRoads, roads,
   } = useSimulationStore();
 
   const [scenarioOpen, setScenarioOpen] = useState(false);
@@ -122,12 +123,36 @@ export const LeftSidebar: React.FC<{ width?: number }> = ({ width = 220 }) => {
         </button>
 
         <button
-          onClick={() => blockRoad(selectedRoadId ?? undefined)}
-          className="btn btn-danger w-full"
+          onClick={() => setBlockRoadMode(!blockRoadMode)}
+          className={`btn w-full ${blockRoadMode ? 'animate-pulse' : 'btn-danger'}`}
+          style={blockRoadMode ? {
+            background: 'rgba(239, 68, 68, 0.25)',
+            borderColor: '#ef4444',
+            color: '#fca5a5',
+            boxShadow: '0 0 15px rgba(239, 68, 68, 0.4)',
+            fontWeight: 700
+          } : undefined}
+          title={blockRoadMode ? 'Click to cancel road block mode' : 'Click two junctions on map to block connecting road'}
         >
           <Lock size={11} />
-          BLOCK ROAD
+          {blockRoadMode
+            ? (blockRoadFirstJunctionId ? '🚧 CLICK 2ND JUNCTION (✕)' : '🚧 CLICK 1ST JUNCTION (✕)')
+            : 'BLOCK ROAD'}
         </button>
+
+        {Object.values(roads).filter(r => r.isBlocked).length > 0 && (
+          <div className="flex items-center justify-between px-2 py-1.5 rounded-lg bg-red-950/40 border border-red-800/60 text-xs">
+            <span className="text-red-300 font-bold text-[10px] flex items-center gap-1">
+              ⛔ {Object.values(roads).filter(r => r.isBlocked).length} Road{Object.values(roads).filter(r => r.isBlocked).length > 1 ? 's' : ''} Blocked
+            </span>
+            <button
+              onClick={unblockAllRoads}
+              className="text-[10px] text-red-200 hover:text-white underline cursor-pointer"
+            >
+              UNBLOCK ALL
+            </button>
+          </div>
+        )}
 
         <button
           onClick={spawnAmbulance}
